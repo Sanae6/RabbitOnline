@@ -1,9 +1,11 @@
 ﻿﻿using System;
 using System.Collections.Generic;
-using System.IO;
+ using System.Data;
+ using System.Diagnostics;
+ using System.IO;
 using System.Linq;
-using Box2DX.Common;
-using RabbitServer.Packets;
+ using System.Xml.XPath;
+ using RabbitServer.Packets;
 
 namespace RabbitServer.Logic
 {
@@ -21,7 +23,11 @@ namespace RabbitServer.Logic
             if (Players.Count == 0) return 0;
             for (int i = 0;i<UInt16.MaxValue;i++)
             {
-                if (Players.ElementAtOrDefault(i)==null) return i;
+                if (Players.ElementAtOrDefault(i) == null || !Players[i].client.client.Connected)
+                {
+                    if (Players.ElementAtOrDefault(i) != null)Players.RemoveAt(i);
+                    return i;
+                }
             }
 
             return -1;
@@ -30,6 +36,11 @@ namespace RabbitServer.Logic
         private ServerPlayer GetPlayer(Server.ClientInstance client)
         {
             return Players.First(x => x.client == client);
+        }
+
+        public void ConnectionCrashed(Server.ClientInstance client)
+        {
+            if (Players.Contains(client.sp)) Players.Remove(client.sp);
         }
         
         public void UserJoined(Server.ClientInstance ci)
@@ -48,7 +59,7 @@ namespace RabbitServer.Logic
                 //Players.First(s => { return s.client == ci; });
                 var sp = GetPlayer(ci);
                 Console.WriteLine($"{sp.PlayerName} left. ({sp.PlayerSlot})");
-                Broadcast(new PlayerConnect{PlayerId = sp.PlayerSlot, Quitting = false},false,sp);
+                Broadcast(new PlayerConnect{PlayerId = sp.PlayerSlot, Quitting = false},false,sp, false);
                 Players.Remove(sp);
             }
             catch
@@ -57,25 +68,28 @@ namespace RabbitServer.Logic
             }
         }
 
-        public void Broadcast(IPacket packet, bool toSelf, ServerPlayer player)
+        public void Broadcast(IPacket packet, bool toSelf, ServerPlayer player, bool connected)
         {
             foreach (var p in Players)
-                if (!toSelf && p != player)
-                    p.SendPacket(packet);
+            {
+                Debug.WriteLine("{0}({1})->{2} (sending = {3})", packet.GetType().Name, player.PlayerSlot, p.PlayerSlot,!toSelf && p != player);
+                if (!toSelf && p != player && (!connected || p.PlayerName != null)) p.SendPacket(packet);
+            }
         }
 
         public void PacketReceived(Server.ClientInstance client, IPacket packet)
         {
-            Console.WriteLine(packet.ToString());
+            //if (!(packet is Movement))Console.WriteLine(packet.ToString());
             ServerPlayer player = GetPlayer(client);
             switch (packet.GetType().Name)
             {
                 case "Connect":
+                    Console.WriteLine("Someone joined! (Connect Packet)");
                     Connect cn = (Connect) packet;
                     if (cn.Version != Server.Version)
                     {
                         player.Disconnect(
-                            $"Your version {cn.Version} is different than the server's version. {Server.Version}");
+                            $"Your version {cn.Version} is different from the server's version. {Server.Version}");
                         return;
                     }
                     var slot = GetNewPlayerSlot();
@@ -89,55 +103,95 @@ namespace RabbitServer.Logic
                     break;
                 case "Disconnect":
                     Disconnect dc = (Disconnect) packet;
-                    Console.WriteLine(dc.Reason);
+                    Console.WriteLine("Disconnected player {0} with reason: \"{1}\"",player.PlayerName != null ? player.PlayerName : "at slot "+ player.PlayerSlot,dc.Reason);
                     //player.client.client.Close();
-                    Broadcast(new PlayerConnect{PlayerId = player.PlayerSlot, Quitting = true, Reason = dc.Reason},false,player);
+                    Broadcast(new PlayerConnect{PlayerId = player.PlayerSlot, Quitting = true, Reason = dc.Reason},false,player, true);
                     break;
                 case "Movement":
                     Movement mv = (Movement) packet;
                     player.Position = mv.Pos;
+                    if (player.CurrentRoom != mv.RoomNumber)Console.WriteLine("{0} went to room number {1}",player.PlayerName,mv.RoomNumber);
+                    player.CurrentRoom = mv.RoomNumber;
                     mv.PlayerId = player.PlayerSlot;
-                    Broadcast(mv,false,player);
+                    Debug.WriteLine(mv);
+                    Broadcast(mv,false,player, true);
                     break;
                 case "PlayerConnect":
                     PlayerConnect pcn = (PlayerConnect) packet;
                     if (!pcn.Quitting)
                     {
+                        Console.WriteLine($"{pcn.Name} joined! (Player Connection Packet)");
                         player.PlayerName = pcn.Name;
                         player.Position = pcn.Pos;
                         player.CurrentRoom = pcn.RoomNumber;
                     }
-                    Broadcast(pcn, false, player);
+                    pcn.PlayerId = player.PlayerSlot;
+                    Broadcast(pcn, false, player, false);
+                    foreach (var cpl in Players)
+                    {
+                        if (cpl != player && cpl.client.client.Connected)
+                        {
+                            Console.WriteLine("{0}<-{1}",player.PlayerSlot,cpl.PlayerSlot);
+                            player.SendPacket(new PlayerConnect
+                            {
+                                Name = cpl.PlayerName,
+                                Quitting = false,
+                                Inform = true,
+                                Pos = cpl.Position,
+                                RoomNumber = cpl.CurrentRoom,
+                                PlayerId = cpl.PlayerSlot
+                            });
+                            player.SendPacket(new SpriteChanged
+                            {
+                                SpriteIndex = cpl.SpriteIndex,
+                                ImageIndex = cpl.ImageIndex,
+                                ImageSpeed = cpl.ImageSpeed,
+                                ImageXScale = cpl.ImageXScale,
+                                Palette = cpl.Palette,
+                                PlayerId = cpl.PlayerSlot,
+                                IsRabbit = cpl.IsRabbit
+                            });
+                        }
+                    }
+                    break;
+                case "SpriteChanged":
+                    SpriteChanged spc = (SpriteChanged) packet;
+                    player.SpriteIndex = spc.SpriteIndex;
+                    player.ImageIndex = spc.ImageIndex;
+                    player.ImageSpeed = spc.ImageSpeed;
+                    player.ImageXScale = spc.ImageXScale;
+                    player.Palette = spc.Palette;
+                    player.IsRabbit = spc.IsRabbit;
+                    spc.PlayerId = player.PlayerSlot;
+                    Debug.WriteLine(spc);
+                    Broadcast(spc,false,player, true);
+                    break;
+                case "RerequestFaker":
+                    RerequestFaker rrq = new RerequestFaker();
+                    if (rrq.PlayerIdOf == player.PlayerSlot) break;
+                    Debug.WriteLine(rrq);
+                    var faker = Players[rrq.PlayerIdOf];
+                    player.SendPacket(new PlayerConnect
+                    {
+                        PlayerId = rrq.PlayerIdOf,
+                        Inform = true,
+                        Name = faker.PlayerName,
+                        Pos = faker.Position,
+                        Quitting = false,
+                        RoomNumber = faker.CurrentRoom
+                    });
+                    player.SendPacket(new SpriteChanged
+                    {
+                        PlayerId = rrq.PlayerIdOf,
+                        Palette = faker.Palette,
+                        ImageIndex = faker.ImageIndex,
+                        ImageSpeed = faker.ImageSpeed,
+                        ImageXScale = faker.ImageXScale,
+                        SpriteIndex = faker.SpriteIndex,
+                        IsRabbit = faker.IsRabbit
+                    });
                     break;
             }
-        }
-    }
-    public class ServerPlayer
-    {
-        public ushort PlayerSlot;
-        public string PlayerName;
-        public Vec2 Position;
-        public /*Room*/ uint CurrentRoom;
-        //potential to implement server side object management ;) and holy fuck that would be insane
-        //multiplayer alone is absurd, but the idea of co-op is just crazy
-        public Server server;
-        public Server.ClientInstance client;
-        
-        public ServerPlayer(Server server, Server.ClientInstance client)
-        {
-            this.server = server;
-            this.client = client;
-        }
-
-        public void SendPacket(IPacket packet)
-        {
-            if (!client.client.Connected||!server.WriteQueues.ContainsKey(client.InstanceId)) return;
-            server.WriteQueues[client.InstanceId].Add(packet);
-        }
-
-        public void Disconnect(string reason)
-        {
-            SendPacket(new Disconnect(reason));
         }
     }
 }

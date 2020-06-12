@@ -2,7 +2,9 @@
 const umm = importNamespace('UndertaleModLib.Models');
 const EType = umm.EventType;
 const umd = importNamespace('UndertaleModLib.Decompiler');
+const umc = importNamespace('UndertaleModLib.Compiler');
 const Decompile = umd.Decompiler.Decompile;
+const data = Data;
 const types = [
     "Create",
     "Destroy",
@@ -34,8 +36,7 @@ function fstr(string) {
 function byName(list,nN,name){
     for(let i=0;i<list.Count;i++){
         if (list[i][nN].Content === name)return list[i];
-    }
-    return null;
+    }//returns undefined automatically so it's fine
 }
 function gmlTextScriptPath(path){
     return System.IO.File.ReadAllText("gml/scripts/"+path+".gml")
@@ -44,7 +45,8 @@ function gmlTextObjectPath(obj, path){
     return System.IO.File.ReadAllText("gml/"+obj.Name.Content+"/"+path+".gml")
 }
 function compileGML(codeO,gml){
-    codeO.ReplaceGML(gml,data)
+    let res = umc.Compiler.CompileGMLText(gml,new umc.CompileContext(data, codeO), true);
+    codeO.Replace(umd.Assembler.Assemble(res.ResultAssembly, data));
 }
 function decompileGML(codeO){
     return Decompile(codeO,new umd.DecompileContext(data,false));
@@ -138,35 +140,58 @@ function createScripts(names){
 
 function multiplayer(){
     let net = new umm.UndertaleGameObject();
+    data.GameObjects.Add(net);
     let faker = new umm.UndertaleGameObject();
+    data.GameObjects.Add(faker);
+    let netlog = new umm.UndertaleGameObject();
+    data.GameObjects.Add(netlog);
+    //use brackets to separate scope to allow for less confusing variable reuse
+    {
+        netlog.Name = mstr("obj_netlog");
+        netlog.Persistent = true;
+        createEvent(netlog,0,0,"create");
+        createEvent(netlog,7,3,"game_end");
+        createEvent(netlog,7,68,"net_async");
+    }
+    {
+        faker.Name = mstr("obj_faker");
+        faker.Persistent = true;
+        faker.Visible = true;
+        faker.Sprite = byName(data.Sprites,"Name","spr_playeridle");
+        createEvent(faker,0, 0, "create");
+        createEvent(faker,3, 0, "step");
+        createEvent(faker,8, 0, "draw");
+    }
+    net.Name = mstr("obj_net");
+    net.Persistent = true;
     createScripts([
+        "netlog",
+        "netlog_pid",
         "menu_connect",
+        "menu_disconnect",
         "send_message",
         "setup_buffer",
+        "handle_disconnect",
         "writes/wop_connect",
         "writes/wop_disconnect",
         "writes/wop_movement",
         "writes/wop_playerconnect",
+        "writes/wop_spritechange",
+        "writes/wop_ping",
+        "writes/wop_fakereq",
         "reads/rop_connect",
         "reads/rop_disconnect",
         "reads/rop_movement",
         "reads/rop_playerconnect",
+        "reads/rop_spritechange",
+        "reads/rop_ping"
     ]);
-    //use brackets to separate scope to allow for less confusing variable reuse
-    {
-        faker.Name = mstr("obj_faker");
-        faker.Persistent = true;
-        faker.Sprite = byName(data.Sprites,"Name","spr_playeridle");
-        data.GameObjects.Add(faker);
-    }
-    {
-        net.Name = mstr("obj_net");
-        net.Persistent = true;
-        data.GameObjects.Add(net);
+    {//net events that require the scripts to be there already
         createEvent(net, 0, 0, "create");
         createEvent(net, 3, 2, "end_step");
         createEvent(net, 7, 68,"net_async");
         createEvent(net, 7, 3, "game_end");
+        createEvent(net, 8, 0, "draw");
     }
     insertScriptGML("savesettings",17, "savesettings");
     insertScriptGML("loadsettings", 9, "loadsettings");
@@ -178,19 +203,25 @@ function multiplayer(){
         let initrm = byName(data.Rooms,"Name","rm_init");
         initrm.GameObjects.Add(go);
         byName(initrm.Layers,"LayerName","Instances").InstancesData.Instances.Add(go);
+        go = new RoomGameObject();
+        go.InstanceID = 108991;
+        go.GMS2_2_2 = true;
+        go.ObjectDefinition = netlog;
+        initrm.GameObjects.Add(go);
+        byName(initrm.Layers,"LayerName","Instances").InstancesData.Instances.Add(go);
     }
     //createEvent(byName(data.GameObjects,"Name","obj_camera"),8,72,"pre_draw");
     replaceGML(getEvent(byName(data.GameObjects,"Name","obj_menus"),0,0),
-        "ds_pmenu_main = create_menu_page(",
-        "ds_pmenu_main = create_menu_page([\"DEBUG MENU\",1,10],");
+        "ds_pmenu_main = create_menu_page([\"RESUME\", 0, 182], ",
+        "ds_pmenu_main = create_menu_page([\"RESUME\", 0, 182], [\"DEBUG MENU\",1,10],");
     {//main menu 
         let mainmenu = byName(data.GameObjects,"Name","obj_mainmenus");
         let create = getEvent(mainmenu,0,0);
         insertLineGML(mainmenu,create,16,"createPage1");
-        replaceGML(create,"[\"ERASE FILE\", 1, 10]", "[\"ERASE FILE\", 1, 10], [\"COPY FILE\", 1, 9]");
+        //replaceGML(create,"[\"ERASE FILE\", 1, 10]", "[\"ERASE FILE\", 1, 10], [\"COPY FILE\", 1, 9]");
         replaceLineGML(create,16,`ds_menu_main = create_menu_page(["START GAME", 1, 8], ["SETTINGS", 1, 1],`+
             `["MULTI-PLAYER", 1, 19], ["EXIT GAME", 0, 185])`);
-        insertGML(create,44,"global.menu_pages[array_length_1d(global.menu_pages)] = ds_menu_net;");
+        insertGML(create,51,"global.menu_pages[array_length_1d(global.menu_pages)] = ds_menu_net;");
         let step = getEvent(mainmenu,3,0);
         replaceGML(step,"var ochange","ochange");
         insertLineGML(mainmenu, step,260,"stepPage2");
@@ -198,11 +229,11 @@ function multiplayer(){
             "case 0: global.CurrentFile = \"savedfile.sav\"; break;" +
             "default: global.CurrentFile = \"savedfile\"+" +
             "string(global.menu_option[global.page]+1)+\".sav\"; break;}");*/
-         insertLineGML(mainmenu, step, 47, "stepPage1");
-        //insertGML(step, 1, "heylois = 0;");
+        insertLineGML(mainmenu, step, 47, "stepPage1");
+        insertGML(step, 1, "heylois = 0;");
         let draw = getEvent(mainmenu, 8,0);
-        insertLineGML(mainmenu, draw, 116, "drawPage1");
-        insertLineGML(mainmenu,draw, 62, "drawPage2");
+        insertLineGML(mainmenu, draw, 115, "drawPage1");
+        insertLineGML(mainmenu, draw, 62, "drawPage2");
     }
 }
 function dump() {

@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitOnline", "RabbitOnline\RabbitOnline.csproj", "{D27DCF6E-908E-4AD7-AD54-9582ECB6C768}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RabbitServer", "RabbitServer\RabbitServer.csproj", "{FE001B16-19A5-4846-B0E7-87A9F5BDFAA8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{D27DCF6E-908E-4AD7-AD54-9582ECB6C768}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D27DCF6E-908E-4AD7-AD54-9582ECB6C768}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D27DCF6E-908E-4AD7-AD54-9582ECB6C768}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FE001B16-19A5-4846-B0E7-87A9F5BDFAA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FE001B16-19A5-4846-B0E7-87A9F5BDFAA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FE001B16-19A5-4846-B0E7-87A9F5BDFAA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FE001B16-19A5-4846-B0E7-87A9F5BDFAA8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

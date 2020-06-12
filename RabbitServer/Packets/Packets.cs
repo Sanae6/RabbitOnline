@@ -71,22 +71,25 @@ namespace RabbitServer.Packets
     {
         public ushort PlayerId { private get; set; }
         public bool Quitting { get; set; }
+        public bool Inform { get; set; }
         public string Name { get; set; }
         public Vec2 Pos { get; set; }
         public uint RoomNumber { get; set; }
         public string Reason { get; set; }
         public override void Read(PacketBinaryReader reader)
         {
+            PlayerId = reader.ReadUInt16();
             Quitting = reader.ReadByte() == 1;
+            Inform = reader.ReadByte() == 1;
             if (Quitting)
+            {
+                Reason = reader.ReadString();
+            }
+            else
             {
                 Name = reader.ReadString();
                 Pos = reader.ReadVec2();
                 RoomNumber = reader.ReadUInt32();
-            }
-            else
-            {
-                Reason = reader.ReadString();
             }
         }
 
@@ -94,7 +97,8 @@ namespace RabbitServer.Packets
         {
             writer.Write(PlayerId);
             writer.Write(Quitting);
-            if (!Quitting)
+            writer.Write(Inform);
+            if (Quitting)
             {
                 writer.Write(Reason);
             }
@@ -108,6 +112,39 @@ namespace RabbitServer.Packets
     }
 
     [Packet(0x04)]
+    public class SpriteChanged : IPacket
+    {
+        public ushort PlayerId { private get; set; }
+        public ushort SpriteIndex { get; set; }
+        public ushort ImageIndex { get; set; }
+        public float ImageSpeed { get; set; }
+        public float ImageXScale { get; set; }
+        public ushort Palette { get; set; }
+        public bool IsRabbit { get; set; }
+
+        public override void Read(PacketBinaryReader reader)
+        {
+            SpriteIndex = reader.ReadUInt16();
+            ImageIndex = reader.ReadUInt16();
+            ImageSpeed = reader.ReadSingle();
+            ImageXScale = reader.ReadSingle();
+            Palette = reader.ReadUInt16();
+            IsRabbit = reader.ReadBoolean();
+        }
+
+        public override void Write(PacketBinaryWriter writer)
+        {
+            writer.Write(PlayerId);
+            writer.Write(SpriteIndex);
+            writer.Write(ImageIndex);
+            writer.Write(ImageSpeed);
+            writer.Write(ImageXScale);
+            writer.Write(Palette);
+            writer.Write(IsRabbit);
+        }
+    }
+    
+    [Packet(0x05)]
     public class Ping : IPacket
     {
         private ulong PID { get; set; }
@@ -121,6 +158,21 @@ namespace RabbitServer.Packets
         {
             if (PID >= UInt64.MaxValue - 100) PID = 0;
             writer.Write(PID+1);
+        }
+    }
+    
+    [Packet(0x06)]
+    public class RerequestFaker : IPacket
+    {
+        public ushort PlayerIdOf { get; private set; }
+        public override void Read(PacketBinaryReader reader)
+        {
+            PlayerIdOf = reader.ReadUInt16();
+        }
+
+        public override void Write(PacketBinaryWriter writer)
+        {
+            //stub
         }
     }
 }

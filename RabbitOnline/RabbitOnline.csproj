@@ -5,4 +5,29 @@
         <TargetFramework>netcoreapp3.1</TargetFramework>
     </PropertyGroup>
 
+    <ItemGroup>
+      <Folder Include="gml\dumps" />
+      <Folder Include="gml\logs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="UndertaleModLib, Version=0.3.0.0, Culture=neutral, PublicKeyToken=null">
+        <HintPath>lib\UndertaleModLib.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="CommandLineParser" Version="2.7.82" />
+      <PackageReference Include="Jint" Version="3.0.0-beta-1778" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="patcher.js">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+        <Content Include="gml\**\*.*">
+            <Link>gml\%(RecursiveDir)%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
 </Project>

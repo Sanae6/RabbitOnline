@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Globalization;
+using System.Reflection;
 using System.Text;
+using Box2DX.Common;
 
 namespace RabbitServer.Packets
 {
@@ -16,7 +19,9 @@ namespace RabbitServer.Packets
             for (var i = 0; i < props.Length; i++)
             {
                 var prop = props[i];
-                builder.Append(prop.Name).Append(" = ").Append(prop.GetValue(this));
+                if (prop.GetValue(this) == null) continue;
+                var pv = prop.GetValue(this);
+                builder.Append(prop.Name).Append(" = ").Append(prop.PropertyType == typeof(Vec2) ? $"Vec2({((Vec2)pv).X}, {((Vec2)pv).Y})" :pv);
                 if (i != props.Length - 1) builder.Append(", ");
             }
             builder.Append(")");

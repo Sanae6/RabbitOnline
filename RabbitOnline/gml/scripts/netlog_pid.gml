@@ -1,0 +1,1 @@
+﻿netlog("["+chr(0x1b)+"[31m"+string(obj_net.selfpid)+chr(0x1b)+"[0m] "+argument0);

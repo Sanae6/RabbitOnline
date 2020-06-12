@@ -23,12 +23,12 @@ namespace RabbitServer.Packets
         public override string ReadString()
         {
             string str = "";
-            char c = '1';
+            char c = '1';//assume null here
             while (c != '\x00')
             {
                 c = ReadChar();
-                str += c;
-            } ;
+                if(c != '\x00')str += c;
+            }
             Console.WriteLine(str);
             return str;
         }
@@ -64,6 +64,7 @@ namespace RabbitServer.Packets
             {
                 Write(c);
             }
+            Write(0);
             Write(0);
         }
     }
